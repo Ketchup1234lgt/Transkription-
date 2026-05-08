@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transkription</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, sans-serif;
+    background: #f0ede8;
+    min-height: 100vh;
+    padding: 3rem 1.5rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .wrap { width: 100%; max-width: 640px; }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.3rem;
+  }
+
+  .sub {
+    font-size: 0.78rem;
+    color: #888;
+    margin-bottom: 2rem;
+  }
+
+  .upload-box {
+    border: 2px dashed #ccc;
+    background: #fff;
+    border-radius: 10px;
+    padding: 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .upload-box:hover, .upload-box.over {
+    border-color: #4a7c65;
+    background: #f4faf7;
+  }
+
+  .upload-box input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon { font-size: 2.5rem; margin-bottom: 0.6rem; }
+  .upload-box p { font-size: 0.9rem; color: #555; }
+  .upload-box .fname { font-size: 0.85rem; color: #4a7c65; font-weight: 500; margin-top: 0.5rem; }
+
+  .btn {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.9rem;
+    background: #2d4a3e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn:hover:not(:disabled) { background: #4a7c65; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress {
+    margin-top: 1.2rem;
+    display: none;
+  }
+  .progress.show { display: block; }
+
+  .bar-track {
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: #4a7c65;
+    width: 0%;
+    transition: width 0.3s;
+    border-radius: 2px;
+  }
+
+  .bar-fill.spin {
+    width: 35%;
+    animation: sweep 1.2s ease-in-out infinite;
+  }
+
+  @keyframes sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+
+  .status {
+    font-size: 0.78rem;
+    color: #888;
+    margin-top: 0.5rem;
+    text-align: center;
+  }
+
+  .result {
+    margin-top: 1.8rem;
+    display: none;
+  }
+  .result.show { display: block; }
+
+  .result label {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .result textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 1rem;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #1a1a1a;
+    resize: vertical;
+    font-family: Georgia, serif;
+    outline: none;
+  }
+
+  .copy {
+    margin-top: 0.6rem;
+    background: transparent;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    color: #555;
+    transition: all 0.2s;
+  }
+  .copy:hover { border-color: #4a7c65; color: #4a7c65; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎙 Transkription</h1>
+  <p class="sub">Läuft lokal im Browser · Kein Upload · Kostenlos</p>
+
+  <div class="upload-box" id="box">
+    <input type="file" id="file" accept="audio/*">
+    <div class="upload-icon">📂</div>
+    <p>m4a, mp3, wav … hier ablegen oder klicken</p>
+    <p class="fname" id="fname"></p>
+  </div>
+
+  <button class="btn" id="btn" disabled onclick="run()">Transkribieren</button>
+
+  <div class="progress" id="progress">
+    <div class="bar-track"><div class="bar-fill spin" id="bar"></div></div>
+    <div class="status" id="status">Initialisiere…</div>
+  </div>
+
+  <div class="result" id="result">
+    <label>Transkript</label>
+    <textarea id="text" readonly></textarea>
+    <button class="copy" onclick="copy()">Kopieren</button>
+  </div>
+</div>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1/dist/transformers.min.js';
+env.allowLocalModels = false;
+
+const fileEl   = document.getElementById('file');
+const box      = document.getElementById('box');
+const fnameEl  = document.getElementById('fname');
+const btn      = document.getElementById('btn');
+const progress = document.getElementById('progress');
+const bar      = document.getElementById('bar');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+const textEl   = document.getElementById('text');
+
+let file = null;
+
+fileEl.onchange = e => pick(e.target.files[0]);
+box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('over'); });
+box.addEventListener('dragleave', () => box.classList.remove('over'));
+box.addEventListener('drop', e => { e.preventDefault(); box.classList.remove('over'); pick(e.dataTransfer.files[0]); });
+
+function pick(f) {
+  file = f;
+  fnameEl.textContent = `${f.name}  (${(f.size/1024/1024).toFixed(1)} MB)`;
+  btn.disabled = false;
+}
+
+window.run = async function() {
+  btn.disabled = true;
+  resultEl.classList.remove('show');
+  progress.classList.add('show');
+  bar.classList.add('spin');
+  statusEl.textContent = 'Modell laden (einmalig ~75 MB)…';
+
+  try {
+    const asr = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
+      progress_callback: p => {
+        if (p.status === 'downloading') {
+          const pct = p.progress ? Math.round(p.progress) : 0;
+          statusEl.textContent = `Modell laden… ${pct}%`;
+          if (pct > 0) { bar.classList.remove('spin'); bar.style.width = (pct * 0.8) + '%'; }
+        }
+        if (p.status === 'ready') statusEl.textContent = 'Modell bereit.';
+      }
+    });
+
+    statusEl.textContent = 'Audio dekodieren…';
+    bar.classList.remove('spin');
+    bar.style.width = '85%';
+
+    const ab = await file.arrayBuffer();
+    const ctx = new AudioContext({ sampleRate: 16000 });
+    const decoded = await ctx.decodeAudioData(ab);
+    const audio = decoded.getChannelData(0);
+
+    statusEl.textContent = 'Transkribiere…';
+    bar.style.width = '92%';
+
+    const out = await asr(audio, { chunk_length_s: 30, stride_length_s: 5, language: 'german', task: 'transcribe' });
+
+    bar.style.width = '100%';
+    statusEl.textContent = '✓ Fertig';
+
+    textEl.value = out.text.trim();
+    resultEl.classList.add('show');
+  } catch(e) {
+    statusEl.textContent = 'Fehler: ' + e.message;
+    console.error(e);
+  }
+
+  btn.disabled = false;
+};
+
+window.copy = function() {
+  navigator.clipboard.writeText(textEl.value);
+};
+</script>
+</body>
+</html>
