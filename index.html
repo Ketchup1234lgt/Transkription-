@@ -218,10 +218,10 @@ window.run = async function() {
   resultEl.classList.remove('show');
   progress.classList.add('show');
   bar.classList.add('spin');
-  statusEl.textContent = 'Modell laden (einmalig ~244 MB)…';
+  statusEl.textContent = 'Modell laden (einmalig ~75 MB)…';
 
   try {
-    const asr = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', {
+    const asr = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
       progress_callback: p => {
         if (p.status === 'downloading') {
           const pct = p.progress ? Math.round(p.progress) : 0;
